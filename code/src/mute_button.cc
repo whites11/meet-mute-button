@@ -10,8 +10,8 @@
 #define BUTTON_PIN 3
 #define NUM_PIXELS 16
 
-#define RED 0x004000
-#define GREEN 0x400000
+#define RED 0x001000
+#define GREEN 0x100000
 
 bool mute_state = false;
 bool oncall_state = false;
@@ -36,6 +36,22 @@ int main() {
     tusb_init();
     neopixel_init();
 
+    // Startup flash test: 3x red/green blink
+    for (int cycle = 0; cycle < 3; cycle++) {
+        for (int i = 0; i < NUM_PIXELS; i++) {
+            put_pixel(RED);
+        }
+        sleep_ms(200);
+        for (int i = 0; i < NUM_PIXELS; i++) {
+            put_pixel(GREEN);
+        }
+        sleep_ms(200);
+    }
+    // Turn off after startup test
+    for (int i = 0; i < NUM_PIXELS; i++) {
+        put_pixel(0x000000);
+    }
+
     gpio_init(BUTTON_PIN);
     gpio_set_dir(BUTTON_PIN, GPIO_IN);
     gpio_pull_up(BUTTON_PIN);
@@ -51,8 +67,10 @@ int main() {
 
     uint8_t report;
 
-    bool prev_button_state = false;
-    absolute_time_t pressed_at = nil_time;
+    const uint32_t DEBOUNCE_US = 50000;
+    bool stable_state = false;
+    bool last_raw = false;
+    absolute_time_t last_change = get_absolute_time();
 
     while (true) {
         tud_task();
@@ -60,21 +78,19 @@ int main() {
             continue;
         }
 
-        bool button_state = !gpio_get(BUTTON_PIN);
-        if (button_state && !prev_button_state) {
-            report = !mute_state;
-            tud_hid_report(REPORT_ID, &report, 1);
-            pressed_at = get_absolute_time();
+        bool raw = !gpio_get(BUTTON_PIN);
+        if (raw != last_raw) {
+            last_raw = raw;
+            last_change = get_absolute_time();
         }
-
-        if (!button_state && prev_button_state) {
-            if (!mute_state && (absolute_time_diff_us(pressed_at, get_absolute_time()) > 500000)) {
-                report = 1;
+        if (raw != stable_state &&
+            (uint32_t)absolute_time_diff_us(last_change, get_absolute_time()) > DEBOUNCE_US) {
+            stable_state = raw;
+            if (raw) {
+                report = !mute_state;
                 tud_hid_report(REPORT_ID, &report, 1);
             }
         }
-
-        prev_button_state = button_state;
         sleep_ms(4);
     }
 
@@ -90,5 +106,9 @@ void tud_hid_set_report_cb(uint8_t itf, uint8_t report_id, hid_report_type_t rep
 }
 
 uint16_t tud_hid_get_report_cb(uint8_t itf, uint8_t report_id, hid_report_type_t report_type, uint8_t* buffer, uint16_t reqlen) {
+    if (report_id == REPORT_ID && report_type == HID_REPORT_TYPE_INPUT) {
+        buffer[0] = mute_state ? 1 : 0;
+        return 1;
+    }
     return 0;
 }
