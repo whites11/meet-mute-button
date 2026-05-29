@@ -68,15 +68,20 @@ int main() {
     uint8_t report;
 
     const uint32_t DEBOUNCE_US = 50000;
+    const int64_t FLASH_PROGRESS_START_US = 2000000;
+    const int64_t FLASH_HOLD_US = 10000000;
+    const uint32_t BLUE = 0x000060;
+    const uint32_t WHITE = 0x808080;
+
     bool stable_state = false;
     bool last_raw = false;
     absolute_time_t last_change = get_absolute_time();
+    bool press_active = false;
+    absolute_time_t press_start = get_absolute_time();
+    int last_lit = -1;
 
     while (true) {
         tud_task();
-        if (!tud_hid_ready()) {
-            continue;
-        }
 
         bool raw = !gpio_get(BUTTON_PIN);
         if (raw != last_raw) {
@@ -89,8 +94,36 @@ int main() {
             if (raw) {
                 report = !mute_state;
                 tud_hid_report(REPORT_ID, &report, 1);
+                press_start = get_absolute_time();
+                press_active = true;
+            } else {
+                press_active = false;
+                if (last_lit >= 0) {
+                    last_lit = -1;
+                    update_led();
+                }
             }
         }
+
+        if (press_active) {
+            int64_t held = absolute_time_diff_us(press_start, get_absolute_time());
+            if (held >= FLASH_HOLD_US) {
+                for (int i = 0; i < NUM_PIXELS; i++) put_pixel(WHITE);
+                sleep_ms(200);
+                reset_usb_boot(0, 0);
+            } else if (held >= FLASH_PROGRESS_START_US) {
+                int lit = ((held - FLASH_PROGRESS_START_US) * NUM_PIXELS) /
+                          (FLASH_HOLD_US - FLASH_PROGRESS_START_US);
+                if (lit > NUM_PIXELS) lit = NUM_PIXELS;
+                if (lit != last_lit) {
+                    last_lit = lit;
+                    for (int i = 0; i < NUM_PIXELS; i++) {
+                        put_pixel(i < lit ? BLUE : 0x000000);
+                    }
+                }
+            }
+        }
+
         sleep_ms(4);
     }
 
