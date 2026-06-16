@@ -12,7 +12,7 @@
 
 #define IS_RGBW false
 
-#define WS2812_PIN 2
+#define WS2812_PIN 7
 
 void put_pixel(uint32_t pixel_grb) {
     pio_sm_put_blocking(pio0, 0, pixel_grb << 8u);
