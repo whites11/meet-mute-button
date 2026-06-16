@@ -67,7 +67,7 @@ int main() {
 
     uint8_t report;
 
-    const uint32_t DEBOUNCE_US = 50000;
+    const uint32_t DEBOUNCE_US = 10000;
     const int64_t FLASH_PROGRESS_START_US = 2000000;
     const int64_t FLASH_HOLD_US = 10000000;
     const uint32_t BLUE = 0x000060;
